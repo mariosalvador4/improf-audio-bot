@@ -63,12 +63,18 @@ async def on_message(message: discord.Message):
         # Aviso de que está generando el audio
         await message.channel.send("🎙 Generando audio con la voz de Mario...")
 
-        # Llamada a ElevenLabs
+        # Llamada a ElevenLabs con modelo profesional y ajustes de voz
         audio_stream = eleven_client.text_to_speech.convert(
             voice_id=VOICE_ID,
-            model_id="eleven_turbo_v2",  # puedes cambiar si quieres otra
+            model_id="eleven_multilingual_v2",  # modelo PRO, misma calidad que en la web
             text=text,
             output_format="mp3_44100_128",
+            voice_settings={
+                "stability": 0.60,
+                "similarity_boost": 0.90,
+                "style": 0.35,
+                "use_speaker_boost": True,
+            },
         )
 
         # audio_stream es un generador de bytes -> lo juntamos
