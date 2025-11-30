@@ -10,34 +10,46 @@ from elevenlabs import ElevenLabs
 # =========================
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
 
+# MARIO (tu cuenta de ElevenLabs)
+ELEVEN_API_KEY_MARIO = os.getenv("ELEVEN_API_KEY")  # la que ya usabas para Mario
 VOICE_ID_MARIO = os.getenv("VOICE_ID_MARIO")
-VOICE_ID_ANDREA = os.getenv("VOICE_ID_ANDREA")
-
 CHANNEL_ID_MARIO = int(os.getenv("CHANNEL_ID_MARIO", "0"))
-CHANNEL_ID_ANDREA = int(os.getenv("CHANNEL_ID_ANDREA", "0"))
+
+# ROMI (cuenta de Romiflexy)
+ELEVEN_API_KEY_ROMI = os.getenv("ELEVEN_API_KEY_ROMI")
+VOICE_ID_ROMI = os.getenv("VOICE_ID_ROMI")
+CHANNEL_ID_ROMI = int(os.getenv("CHANNEL_ID_ROMI", "0"))
 
 if not DISCORD_TOKEN:
     raise RuntimeError("Falta DISCORD_TOKEN en Railway")
-if not ELEVEN_API_KEY:
-    raise RuntimeError("Falta ELEVEN_API_KEY en Railway")
+
+if not ELEVEN_API_KEY_MARIO:
+    raise RuntimeError("Falta ELEVEN_API_KEY (MARIO) en Railway")
 if not VOICE_ID_MARIO:
     raise RuntimeError("Falta VOICE_ID_MARIO en Railway")
-if not VOICE_ID_ANDREA:
-    raise RuntimeError("Falta VOICE_ID_ANDREA en Railway")
 if CHANNEL_ID_MARIO == 0:
     raise RuntimeError("Falta CHANNEL_ID_MARIO en Railway")
-if CHANNEL_ID_ANDREA == 0:
-    raise RuntimeError("Falta CHANNEL_ID_ANDREA en Railway")
 
-# Cliente único de ElevenLabs (misma cuenta para ambas voces)
-eleven_client = ElevenLabs(api_key=ELEVEN_API_KEY)
+if not ELEVEN_API_KEY_ROMI:
+    raise RuntimeError("Falta ELEVEN_API_KEY_ROMI en Railway")
+if not VOICE_ID_ROMI:
+    raise RuntimeError("Falta VOICE_ID_ROMI en Railway")
+if CHANNEL_ID_ROMI == 0:
+    raise RuntimeError("Falta CHANNEL_ID_ROMI en Railway")
 
-# Mapear canal -> voz y nombre (solo para logs/mensajes)
-CHANNEL_TO_VOICE = {
-    CHANNEL_ID_MARIO: ("Mario", VOICE_ID_MARIO),
-    CHANNEL_ID_ANDREA: ("Andrea", VOICE_ID_ANDREA),
+# =========================
+#  CLIENTES ELEVENLABS
+# =========================
+
+# Un cliente por cuenta de ElevenLabs
+client_mario = ElevenLabs(api_key=ELEVEN_API_KEY_MARIO)
+client_romi = ElevenLabs(api_key=ELEVEN_API_KEY_ROMI)
+
+# Mapear canal -> (nombre modelo, cliente, voice_id)
+CHANNEL_CONFIG = {
+    CHANNEL_ID_MARIO: ("Mario", client_mario, VOICE_ID_MARIO),
+    CHANNEL_ID_ROMI: ("Romi", client_romi, VOICE_ID_ROMI),
 }
 
 # =========================
@@ -66,15 +78,15 @@ async def on_message(message: discord.Message):
 
     channel_id = message.channel.id
 
-    # Solo reaccionar en los canales configurados (Mario / Andrea)
-    if channel_id not in CHANNEL_TO_VOICE:
+    # Solo reaccionar en los canales configurados (Mario / Romi)
+    if channel_id not in CHANNEL_CONFIG:
         return
 
     text = message.content.strip()
     if not text:
         return
 
-    model_name, voice_id = CHANNEL_TO_VOICE[channel_id]
+    model_name, client, voice_id = CHANNEL_CONFIG[channel_id]
 
     print(f"📩 Mensaje recibido en canal {channel_id} ({model_name}): {text}")
 
@@ -83,7 +95,7 @@ async def on_message(message: discord.Message):
         await message.channel.send(f"🎙 Generando audio con la voz de {model_name}...")
 
         # Llamada a ElevenLabs con modelo profesional y ajustes de voz
-        audio_stream = eleven_client.text_to_speech.convert(
+        audio_stream = client.text_to_speech.convert(
             voice_id=voice_id,
             model_id="eleven_multilingual_v2",  # modelo PRO, misma calidad que en la web
             text=text,
@@ -111,7 +123,7 @@ async def on_message(message: discord.Message):
     except Exception as e:
         print(f"❌ Error generando audio para {model_name}: {e}")
         await message.channel.send(
-            f"❌ Ha habido un error generando el audio. Avísale a Mario."
+            "❌ Ha habido un error generando el audio. Avísale a Mario."
         )
 
     # Para que sigan funcionando comandos si algún día los usas
