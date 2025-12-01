@@ -75,6 +75,7 @@ async def on_message(message: discord.Message):
 
     channel_id = message.channel.id
 
+    # Si el canal no está configurado, no hacemos nada
     if channel_id not in CHANNEL_TO_DATA:
         return
 
@@ -89,21 +90,18 @@ async def on_message(message: discord.Message):
     try:
         await message.channel.send(f"🎙 Generando audio con la voz de **{model_name}**...")
 
-        # =========================
-        #  CONFIGURACIÓN EXACTA QUE PEDISTE
-        # =========================
+        # ElevenLabs PRO con tus ajustes
         audio_stream = eleven_client.text_to_speech.convert(
             voice_id=voice_id,
             model_id="eleven_multilingual_v2",
             text=text,
             output_format="mp3_44100_128",
             voice_settings={
-                "stability": 0.35,
-                "similarity_boost": 0.60,
-                "style": 0.20,
+                "stability": 0.35,         # Estabilidad 35%
+                "similarity_boost": 0.60,  # Similitud 60%
+                "style": 0.20,             # Exageración estilo 20%
                 "use_speaker_boost": True,
             },
-            voice_speed=0.90,  # VELOCIDAD EXACTA
         )
 
         audio_bytes = b"".join(audio_stream)
@@ -117,7 +115,7 @@ async def on_message(message: discord.Message):
     except Exception as e:
         print(f"❌ Error generando audio para {model_name}: {e}")
         await message.channel.send(
-            "❌ Ha habido un error generando el audio. Avísale a Mario."
+            f"❌ Ha habido un error generando el audio. Avísale a Mario."
         )
 
     await bot.process_commands(message)
