@@ -21,7 +21,15 @@ ELEVEN_API_KEY_ROMI = os.getenv("ELEVEN_API_KEY_ROMI")
 VOICE_ID_ROMI = os.getenv("VOICE_ID_ROMI")
 CHANNEL_ID_ROMI = int(os.getenv("CHANNEL_ID_ROMI", "0"))
 
-# Validaciones
+# Cecilia (su cuenta) — opcional hasta que la actives
+ELEVEN_API_KEY_CECILIA = os.getenv("ELEVEN_API_KEY_CECILIA")
+VOICE_ID_CECILIA = os.getenv("VOICE_ID_CECILIA")
+CHANNEL_ID_CECILIA = int(os.getenv("CHANNEL_ID_CECILIA", "0"))
+
+# =========================
+#   VALIDACIONES (solo obligatorias)
+# =========================
+
 required_vars = {
     "DISCORD_TOKEN": DISCORD_TOKEN,
     "ELEVEN_API_KEY_MARIO": ELEVEN_API_KEY_MARIO,
@@ -48,6 +56,14 @@ CHANNEL_TO_DATA = {
     CHANNEL_ID_MARIO: ("Mario", VOICE_ID_MARIO, client_mario),
     CHANNEL_ID_ROMI: ("Romi", VOICE_ID_ROMI, client_romi),
 }
+
+# Si Cecilia está configurada, la añadimos
+if ELEVEN_API_KEY_CECILIA and VOICE_ID_CECILIA and CHANNEL_ID_CECILIA != 0:
+    client_cecilia = ElevenLabs(api_key=ELEVEN_API_KEY_CECILIA)
+    CHANNEL_TO_DATA[CHANNEL_ID_CECILIA] = ("Cecilia", VOICE_ID_CECILIA, client_cecilia)
+    print("✅ Cecilia activada en el bot")
+else:
+    print("ℹ️ Cecilia no está configurada todavía (variables faltantes)")
 
 # =========================
 #   CONFIG DISCORD
@@ -90,23 +106,21 @@ async def on_message(message: discord.Message):
     try:
         await message.channel.send(f"🎙 Generando audio con la voz de **{model_name}**...")
 
-        # ElevenLabs PRO con tus ajustes
         audio_stream = eleven_client.text_to_speech.convert(
             voice_id=voice_id,
             model_id="eleven_multilingual_v2",
             text=text,
             output_format="mp3_44100_128",
             voice_settings={
-                "stability": 0.35,         # Estabilidad 35%
-                "similarity_boost": 0.60,  # Similitud 60%
-                "style": 0.20,             # Exageración estilo 20%
+                "stability": 0.35,
+                "similarity_boost": 0.60,
+                "style": 0.20,
                 "use_speaker_boost": True,
             },
         )
 
         audio_bytes = b"".join(audio_stream)
         filename = f"{model_name.lower()}_audio.mp3"
-
         audio_file = discord.File(BytesIO(audio_bytes), filename=filename)
 
         await message.channel.send(file=audio_file)
@@ -114,9 +128,7 @@ async def on_message(message: discord.Message):
 
     except Exception as e:
         print(f"❌ Error generando audio para {model_name}: {e}")
-        await message.channel.send(
-            f"❌ Ha habido un error generando el audio. Avísale a Mario."
-        )
+        await message.channel.send("❌ Ha habido un error generando el audio. Avísale a Mario.")
 
     await bot.process_commands(message)
 
