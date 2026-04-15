@@ -1,4 +1,5 @@
 import os
+import re
 from io import BytesIO
 
 import discord
@@ -11,23 +12,22 @@ from elevenlabs import ElevenLabs
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
-# Mario (tu cuenta)
+# Mario
 ELEVEN_API_KEY_MARIO = os.getenv("ELEVEN_API_KEY")
 VOICE_ID_MARIO = os.getenv("VOICE_ID_MARIO")
 CHANNEL_ID_MARIO = int(os.getenv("CHANNEL_ID_MARIO", "0"))
 
-# Romi (su cuenta)
+# Romi
 ELEVEN_API_KEY_ROMI = os.getenv("ELEVEN_API_KEY_ROMI")
 VOICE_ID_ROMI = os.getenv("VOICE_ID_ROMI")
 CHANNEL_ID_ROMI = int(os.getenv("CHANNEL_ID_ROMI", "0"))
 
-# Cecilia (su cuenta) — opcional hasta que la actives
-ELEVEN_API_KEY_CECILIA = os.getenv("ELEVEN_API_KEY_CECILIA")
-VOICE_ID_CECILIA = os.getenv("VOICE_ID_CECILIA")
-CHANNEL_ID_CECILIA = int(os.getenv("CHANNEL_ID_CECILIA", "0"))
+# Modelos
+ELEVEN_MODEL_ID_DEFAULT = os.getenv("ELEVEN_MODEL_ID_DEFAULT", "eleven_multilingual_v2")
+ELEVEN_MODEL_ID_EXPRESSIVE = os.getenv("ELEVEN_MODEL_ID_EXPRESSIVE", "eleven_v3")
 
 # =========================
-#   VALIDACIONES (solo obligatorias)
+#   VALIDACIONES
 # =========================
 
 required_vars = {
@@ -57,13 +57,7 @@ CHANNEL_TO_DATA = {
     CHANNEL_ID_ROMI: ("Romi", VOICE_ID_ROMI, client_romi),
 }
 
-# Si Cecilia está configurada, la añadimos
-if ELEVEN_API_KEY_CECILIA and VOICE_ID_CECILIA and CHANNEL_ID_CECILIA != 0:
-    client_cecilia = ElevenLabs(api_key=ELEVEN_API_KEY_CECILIA)
-    CHANNEL_TO_DATA[CHANNEL_ID_CECILIA] = ("Cecilia", VOICE_ID_CECILIA, client_cecilia)
-    print("✅ Cecilia activada en el bot")
-else:
-    print("ℹ️ Cecilia no está configurada todavía (variables faltantes)")
+print("✅ Bot configurado con Mario y Romi")
 
 # =========================
 #   CONFIG DISCORD
@@ -74,6 +68,64 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# =========================
+#   UTILIDADES DE TEXTO
+# =========================
+
+def normalize_prompt_text(text: str) -> str:
+    """
+    Convierte aliases en español a tags inline.
+    No elimina los tags ya existentes.
+    """
+    replacements = {
+        # Básicos
+        r"\(susurro\)": "[whispers]",
+        r"\(susurrando\)": "[whispers]",
+        r"\(lento\)": "[slow]",
+        r"\(despacio\)": "[slow]",
+        r"\(emocionado\)": "[excited]",
+        r"\(excitado\)": "[excited]",
+        r"\(riendo\)": "[laughs]",
+        r"\(risa\)": "[laughs]",
+        r"\(suspiro\)": "[sighs]",
+        r"\(pausa\)": "[pause]",
+        r"\(gemido\)": "[moans]",
+        r"\(gimiendo\)": "[moans]",
+
+        # Emociones nuevas
+        r"\(enfadado\)": "[excited]",
+        r"\(enamorado\)": "[slow][whispers]",
+    }
+
+    normalized = text
+    for pattern, replacement in replacements.items():
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+
+    return normalized.strip()
+
+
+def should_use_expressive_model(text: str) -> bool:
+    """
+    Detecta si hay entonación.
+    """
+    has_inline_tags = bool(re.search(r"\[[^\[\]]+\]", text))
+    has_aliases = bool(
+        re.search(
+            r"\((susurro|susurrando|lento|despacio|emocionado|excitado|riendo|risa|suspiro|pausa|gemido|gimiendo|enfadado|enamorado)\)",
+            text,
+            flags=re.IGNORECASE
+        )
+    )
+    return has_inline_tags or has_aliases
+
+
+def get_model_id_for_text(text: str) -> str:
+    return ELEVEN_MODEL_ID_EXPRESSIVE if should_use_expressive_model(text) else ELEVEN_MODEL_ID_DEFAULT
+
+
+# =========================
+#   EVENTOS DISCORD
+# =========================
 
 @bot.event
 async def on_ready():
@@ -91,24 +143,35 @@ async def on_message(message: discord.Message):
 
     channel_id = message.channel.id
 
-    # Si el canal no está configurado, no hacemos nada
+    # Solo responde en canales configurados
     if channel_id not in CHANNEL_TO_DATA:
         return
 
-    text = message.content.strip()
-    if not text:
+    raw_text = message.content.strip()
+    if not raw_text:
         return
 
     model_name, voice_id, eleven_client = CHANNEL_TO_DATA[channel_id]
 
-    print(f"📩 Mensaje en canal {channel_id} ({model_name}): {text}")
+    # Detectar modelo
+    model_id = get_model_id_for_text(raw_text)
+
+    # Normalizar texto
+    text = normalize_prompt_text(raw_text)
+
+    print(f"📩 Mensaje en canal {channel_id} ({model_name})")
+    print(f"   Texto original: {raw_text}")
+    print(f"   Texto final:    {text}")
+    print(f"   Modelo:         {model_id}")
 
     try:
-        await message.channel.send(f"🎙 Generando audio con la voz de **{model_name}**...")
+        await message.channel.send(
+            f"🎙 Generando audio con la voz de **{model_name}**..."
+        )
 
         audio_stream = eleven_client.text_to_speech.convert(
             voice_id=voice_id,
-            model_id="eleven_multilingual_v2",
+            model_id=model_id,
             text=text,
             output_format="mp3_44100_128",
             voice_settings={
@@ -121,17 +184,15 @@ async def on_message(message: discord.Message):
 
         audio_bytes = b"".join(audio_stream)
         filename = f"{model_name.lower()}_audio.mp3"
+
         audio_file = discord.File(BytesIO(audio_bytes), filename=filename)
 
         await message.channel.send(file=audio_file)
+
         print(f"✅ Audio enviado correctamente ({model_name})")
 
     except Exception as e:
         print(f"❌ Error generando audio para {model_name}: {e}")
-        await message.channel.send("❌ Ha habido un error generando el audio. Avísale a Mario.")
+        await message.channel.send("❌ Error generando el audio.")
 
     await bot.process_commands(message)
-
-
-if __name__ == "__main__":
-    bot.run(DISCORD_TOKEN)
